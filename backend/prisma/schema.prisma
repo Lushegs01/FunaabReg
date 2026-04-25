@@ -1,0 +1,225 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  active
+  disabled
+  invited
+
+  @@map("user_status")
+}
+
+enum UserRole {
+  student
+  lecturer
+  admin
+  super_admin
+
+  @@map("user_role")
+}
+
+enum VerificationStatus {
+  draft
+  submitted
+  pending
+  verified
+  rejected
+  needs_correction
+
+  @@map("verification_status")
+}
+
+model University {
+  id        String   @id @default(uuid()) @db.Uuid
+  code      String   @unique
+  name      String
+  state     String
+  domain    String?
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  users       User[]
+  departments Department[]
+  faculties   Faculty[]
+
+  @@map("universities")
+}
+
+model Faculty {
+  id           String     @id @default(uuid()) @db.Uuid
+  universityId String     @map("university_id") @db.Uuid
+  code         String
+  name         String
+  createdAt    DateTime   @default(now()) @map("created_at")
+  university   University @relation(fields: [universityId], references: [id])
+
+  @@unique([universityId, code])
+  @@index([universityId])
+  @@map("faculties")
+}
+
+model Department {
+  id           String     @id @default(uuid()) @db.Uuid
+  universityId String     @map("university_id") @db.Uuid
+  facultyId    String     @map("faculty_id") @db.Uuid
+  code         String
+  name         String
+  createdAt    DateTime   @default(now()) @map("created_at")
+  university   University @relation(fields: [universityId], references: [id])
+
+  @@unique([universityId, code])
+  @@index([universityId, facultyId])
+  @@map("departments")
+}
+
+model User {
+  id           String     @id @default(uuid()) @db.Uuid
+  universityId String?    @map("university_id") @db.Uuid
+  email        String
+  phone        String?
+  passwordHash String     @map("password_hash")
+  status       UserStatus @default(active)
+  lastLoginAt  DateTime?  @map("last_login_at")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+  university   University? @relation(fields: [universityId], references: [id])
+  roles        UserRoleAssignment[]
+  refreshTokens RefreshToken[]
+
+  @@unique([universityId, email])
+  @@index([universityId, status])
+  @@map("users")
+}
+
+model UserRoleAssignment {
+  userId       String   @map("user_id") @db.Uuid
+  universityId String?  @map("university_id") @db.Uuid
+  role         UserRole
+  createdAt    DateTime @default(now()) @map("created_at")
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, role])
+  @@index([universityId, role])
+  @@map("user_roles")
+}
+
+model RefreshToken {
+  id                String   @id @default(uuid()) @db.Uuid
+  userId            String   @map("user_id") @db.Uuid
+  tokenHash         String   @unique @map("token_hash")
+  userAgent         String?  @map("user_agent")
+  ipAddress         String?  @map("ip_address")
+  expiresAt         DateTime @map("expires_at")
+  revokedAt         DateTime? @map("revoked_at")
+  replacedByTokenId String?  @map("replaced_by_token_id") @db.Uuid
+  createdAt         DateTime @default(now()) @map("created_at")
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@map("refresh_tokens")
+}
+
+model Student {
+  id                 String             @id @default(uuid()) @db.Uuid
+  universityId       String             @map("university_id") @db.Uuid
+  userId             String?            @unique @map("user_id") @db.Uuid
+  departmentId       String             @map("department_id") @db.Uuid
+  matricNo           String?            @map("matric_no")
+  jambRegistrationNo String?            @map("jamb_registration_no")
+  surname            String
+  firstName          String             @map("first_name")
+  otherNames         String?            @map("other_names")
+  level              Int
+  admissionYear      Int                @map("admission_year")
+  recordStatus       VerificationStatus @default(draft) @map("record_status")
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
+  registrations      StudentRegistration[]
+
+  @@unique([universityId, matricNo])
+  @@unique([universityId, jambRegistrationNo])
+  @@index([universityId, departmentId, level])
+  @@map("students")
+}
+
+model AcademicSession {
+  id           String   @id @default(uuid()) @db.Uuid
+  universityId String   @map("university_id") @db.Uuid
+  name         String
+  startsOn     DateTime @map("starts_on") @db.Date
+  endsOn       DateTime @map("ends_on") @db.Date
+  isCurrent    Boolean  @default(false) @map("is_current")
+
+  @@unique([universityId, name])
+  @@index([universityId, isCurrent])
+  @@map("academic_sessions")
+}
+
+model StudentRegistration {
+  id                String             @id @default(uuid()) @db.Uuid
+  universityId      String             @map("university_id") @db.Uuid
+  studentId         String             @map("student_id") @db.Uuid
+  academicSessionId String             @map("academic_session_id") @db.Uuid
+  status            VerificationStatus @default(draft)
+  submittedAt       DateTime?          @map("submitted_at")
+  verifiedBy        String?            @map("verified_by") @db.Uuid
+  verifiedAt        DateTime?          @map("verified_at")
+  rejectionReason   String?            @map("rejection_reason")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+  student           Student            @relation(fields: [studentId], references: [id])
+  documents         RegistrationDocument[]
+
+  @@unique([universityId, studentId, academicSessionId])
+  @@index([universityId, academicSessionId, status, submittedAt])
+  @@map("student_registrations")
+}
+
+model RegistrationDocument {
+  id             String             @id @default(uuid()) @db.Uuid
+  universityId   String             @map("university_id") @db.Uuid
+  registrationId String             @map("registration_id") @db.Uuid
+  documentType   String             @map("document_type")
+  objectKey      String             @unique @map("object_key")
+  fileName       String             @map("file_name")
+  mimeType       String             @map("mime_type")
+  byteSize       BigInt             @map("byte_size")
+  sha256Hash     String             @map("sha256_hash")
+  version        Int                @default(1)
+  status         VerificationStatus @default(pending)
+  uploadedBy     String             @map("uploaded_by") @db.Uuid
+  uploadedAt     DateTime           @default(now()) @map("uploaded_at")
+  verifiedBy     String?            @map("verified_by") @db.Uuid
+  verifiedAt     DateTime?          @map("verified_at")
+  rejectionReason String?           @map("rejection_reason")
+  registration   StudentRegistration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  @@unique([registrationId, documentType, version])
+  @@index([universityId, status, uploadedAt])
+  @@map("registration_documents")
+}
+
+model AuditLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  universityId String? @map("university_id") @db.Uuid
+  actorUserId String?  @map("actor_user_id") @db.Uuid
+  action      String
+  targetType  String   @map("target_type")
+  targetId    String?  @map("target_id") @db.Uuid
+  requestId   String?  @map("request_id")
+  ipAddress   String?  @map("ip_address")
+  userAgent   String?  @map("user_agent")
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([universityId, createdAt])
+  @@index([targetType, targetId])
+  @@map("audit_logs")
+}
