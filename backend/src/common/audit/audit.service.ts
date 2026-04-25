@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import type { FastifyRequest } from "fastify";
 import { prisma } from "../db/prisma.js";
 
@@ -5,7 +6,7 @@ export interface AuditInput {
   action: string;
   targetType: string;
   targetId?: string;
-  metadata?: Record<string, unknown>;
+  metadata?: Prisma.InputJsonObject;
 }
 
 export async function audit(request: FastifyRequest, input: AuditInput): Promise<void> {
